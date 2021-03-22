@@ -1,0 +1,169 @@
+- name: Jira Update
+  hosts: AnsiblePoc
+  vars:
+    ip_addr: 'jira.hepsiburada.com'
+    port_num: '8443'
+    jira_operator: 'ansible'
+
+  tasks:
+  #- name: Show Var
+   # debug:
+    #  var: Jira_Comment
+
+  - name: Comment on issue
+    community.general.jira:
+      uri: "https://{{ip_addr}}:{{port_num}}"
+      username: 'ansible'
+      password: 'ansible10'
+      timeout: 300
+      operation: search
+      maxresults: 1
+      jql: project = HXS AND issuetype = Support AND status = Open AND "HX Reasons" in cascadeOption(18137, 18385)
+    register: response
+
+  - name: Install, configure, and start Apache
+    block:
+      - name: Get TicketName
+        set_fact:
+          TctName: "{{ response | json_query('meta.issues[*].fields.summary') | first | string }}"
+          TicketNumber: "{{ response | json_query('meta.issues[*].key') | first | string }}"
+
+      - name: Get OrnerNum
+        set_fact:
+          OrdNum: "{{ TctName.split('#')[1] | lower }}"
+
+      - name: Install httpd and memcached
+        debug:
+          msg: "{{ OrdNum }}"
+
+      - name: Query Run       
+        command: mongo 'mongodb://techops:7sYCZqgE3%21@oms-mongo-01.hepsiburada.dmz:27127,oms-mongo-02.hepsiburada.dmz:27127,oms-mongo-03.hepsiburada.dmz:27127,oms-mongo-04.hepsiburada.dmz:27127/EndorDB?readPreference=primaryPreferred&serverSelectionTimeoutMS=10000&connectTimeoutMS=10000&authSource=EndorDB&authMechanism=SCRAM-SHA-1' --eval 'rs.slaveOk(),db.getCollection("OrderLines").find({ "OrderNumber"':'"{{OrdNum}}" }, {"Status"':' 1}).limit(20)'
+        register: mongoresult
+
+      - name: Install httpd and memcached
+        debug:
+          msg: "{{ mongoresult.stdout }}"
+      
+      - name: Assigntome
+        community.general.jira:
+          uri: "https://{{ip_addr}}:{{port_num}}"
+          username: 'ansible'
+          password: 'ansible10'
+          issue: "{{ TicketNumber }}"
+          operation: transition
+          status: Assign To Me
+
+      - name: StatusDelivered
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Siparişin teslim bilgisi gönderilmiştir."
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: transition
+              status: Resolve
+        when: mongoresult.stdout.find('Delivered') != -1
+
+      - name: StatusInTransit
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Merhaba, Sipariş kargoya verilmiş intransit durumdadır"
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: transition
+              status: Resolve
+        when: mongoresult.stdout.find('InTransit') != -1
+
+      - name: StatusReturned
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Sipariş iade edilmiştir."
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: transition
+              status: Resolve
+        when: mongoresult.stdout.find('Returned') != -1
+        
+      - name: StatusClaimCreated
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Sipariş iade talebi oluşturulmuştur."
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: transition
+              status: Resolve
+        when: mongoresult.stdout.find('ClaimCreated') != -1
+
+
+      - name: StatusCancelled
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Siparişteki kalemler iptal edilmiştir."
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: transition
+              status: Resolve
+        when: mongoresult.stdout.find('Cancelled') != -1
+
+      
+    when: response.meta.total != 0
+    ignore_errors: no   
