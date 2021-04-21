@@ -17,7 +17,7 @@
       password: 'ansible10'
       timeout: 300
       operation: search
-      maxresults: 1
+      maxresults: 15
       jql: project = HXS AND issuetype = Support AND status = Open AND "HX Reasons" in cascadeOption(18137, 18385)
     register: response
 
@@ -140,6 +140,56 @@
               operation: transition
               status: Resolve
         when: mongoresult.stdout.find('ClaimCreated') != -1
+
+      - name: StatusInProgress
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Sizin tarafta hata logunu iletir misiniz ? "
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: edit
+            args:
+              fields:
+                customfield_34183: 'Ayen Support'
+                customfield_34172:  {'name':'Ayen Support'}
+        when: mongoresult.stdout.find('InProgress') != -1
+        
+      - name: StatusPlaced
+        block:
+          - name: Comment on issue
+            jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              timeout: 300
+              operation: comment
+              comment: "Sizin tarafta hata logunu iletir misiniz ? "
+          
+          - name: Close the issue
+            community.general.jira:
+              uri: "https://{{ip_addr}}:{{port_num}}"
+              username: 'ansible'
+              password: 'ansible10'
+              issue: "{{ TicketNumber }}"
+              operation: edit
+            args:
+              fields:
+                customfield_34183: 'Ayen Support'
+                customfield_34172:  {'name':'Ayen Support'}
+        when: mongoresult.stdout.find('Placed') != -1
 
 
       - name: StatusCancelled
